@@ -4,7 +4,7 @@ Frontend on Vercel, backend as a Docker container on an EC2 instance listening o
 and Neo4j as a second container on the same box.
 
 **Live app:** https://supplier-risk-krushnasr96gmailcoms-projects.vercel.app
-**Live API:** _<https://... >_ (`/health`, `/docs`)
+**Live API:** https://supplier-api.technicalshree.in (`/health`, `/docs`)
 
 ---
 

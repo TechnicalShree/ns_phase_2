@@ -5,7 +5,7 @@ SQL = delivery/defect metrics · FAISS = contract/complaint/audit text · Neo4j 
 and sub-tier dependency graph · Verdict = **APPROVE / FLAG**.
 
 **Live app:** https://supplier-risk-krushnasr96gmailcoms-projects.vercel.app
-**Live API:** _<https://... — fill in after deploy>_ (`/health`, `/docs`)
+**Live API:** https://supplier-api.technicalshree.in (`/health`, `/docs`)
 
 Three retrieval engines are queried **simultaneously** for the same supplier, and a **DSPy
 `ChainOfThought` module compiled with `BootstrapFewShot`** (teacher/student model split over
