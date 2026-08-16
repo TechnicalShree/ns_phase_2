@@ -1,37 +1,45 @@
-# Deployment
+# Deployment — Phase 2 (Supplier Risk, three-engine retrieval)
 
-How this project is deployed, and how to reproduce it. Frontend on Vercel, backend as a Docker
-container on a VM behind HTTPS.
+Frontend on Vercel, backend as a Docker container on an EC2 instance listening on **:8080**,
+Neo4j either on the same box (compose profile) or on Neo4j Aura.
 
-**Live app:** https://scheme-navigator-krushnasr96gmailcoms-projects.vercel.app
-**Live API:** https://scheme-api.technicalshree.in (`/health`, `/docs`)
+**Live app:** _<vercel URL>_
+**Live API:** _<https://... >_ (`/health`, `/docs`)
 
 ---
 
 ## Why the backend can't be serverless
 
-`torch` + `sentence-transformers` + `faiss-cpu` exceed the Vercel/Lambda 250 MB function limit, and
-the FAISS index lives on local disk. The backend needs a container host with persistent storage —
-a VM, Render, Railway or Fly.io. Only the frontend goes on Vercel.
+`torch` + `sentence-transformers` + `faiss-cpu` exceed the Vercel/Lambda 250 MB function limit, the
+FAISS index and SQLite file live on local disk, and the compiled DSPy state is written to that same
+volume. The backend needs a container host with persistent storage. Only the frontend goes on Vercel.
 
 ---
 
-## 1. Backend — Docker on a VM
+## 1. Backend — Docker on EC2
 
 ```bash
-git clone https://github.com/TechnicalShree/ns_phase_1.git
-cd ns_phase_1
-cp backend/.env.example backend/.env      # set OPENROUTER_API_KEY
-sudo docker compose up -d --build         # API listens on :8000
-curl localhost:8000/health
+ssh -i ~/.ssh/<key>.pem ubuntu@<ec2-host>
+
+sudo apt-get update && sudo apt-get install -y docker.io docker-compose-v2 git
+sudo usermod -aG docker $USER && newgrp docker
+
+git clone https://github.com/TechnicalShree/ns_phase_2.git && cd ns_phase_2
+cp backend/.env.example backend/.env   # set OPENROUTER_API_KEY and NEO4J_*
+docker compose up -d --build           # API listens on :8080
+curl localhost:8080/health
 ```
 
-First boot takes a few minutes — torch and both MiniLM models load into memory before the health
-check passes. The models are baked into the image at build time, so there is no download at runtime.
+First boot seeds all three stores automatically (`generate_sandbox.py` runs if `data/suppliers.db`
+is missing) and prints row/vector/node counts in the logs. MiniLM is baked into the image, so
+nothing is downloaded at runtime.
+
+Security group: open **8080** (or keep it closed and use a Cloudflare tunnel — see §2).
 
 ### Add swap first on a 1 GB box
 
-The container needs ~1.3 GB RSS. On a `t2.micro` it will be OOM-killed without swap:
+The API container needs ~1.3 GB RSS, and Neo4j another ~700 MB if you run it locally. On a
+`t2.micro` both get OOM-killed without swap:
 
 ```bash
 sudo fallocate -l 4G /swapfile && sudo chmod 600 /swapfile
@@ -39,37 +47,43 @@ sudo mkswap /swapfile && sudo swapon /swapfile
 echo '/swapfile none swap sw 0 0' | sudo tee -a /etc/fstab
 ```
 
-### Index the documents once
+### Neo4j: Aura or local
+
+- **Aura (recommended on a small box):** set `NEO4J_URI=neo4j+s://<id>.databases.neo4j.io`,
+  `NEO4J_USER=neo4j`, `NEO4J_PASSWORD=…` in `backend/.env`. Nothing else to run.
+  Free Aura instances **pause when idle and are deleted after 30 days** — if `generate_sandbox.py`
+  prints `Cannot resolve address …databases.neo4j.io`, the instance is gone; create a new one.
+- **Local:** `docker compose --profile local-graph up -d` and set `NEO4J_URI=bolt://neo4j:7687`.
+
+Re-seed the graph after switching:
 
 ```bash
-curl -F file=@sample_docs/snap_7cfr273_eligibility.pdf "localhost:8000/upload?reset=true"
-curl -F file=@sample_docs/snap_7cfr271_general.pdf     "localhost:8000/upload?reset=false"
+docker compose exec api python generate_sandbox.py
 ```
 
-A named volume is mounted at `/app/data`, so the FAISS index and `eval_log.jsonl` survive restarts
-and rebuilds. Verify with `docker compose restart` — `/health` should still list both sources.
+### Compile the DSPy module on the box
+
+```bash
+docker compose exec api python compile_dspy.py       # ~3-5 min, ~25 OpenRouter calls
+curl -s localhost:8080/compile-report | head -40
+```
+
+The named volume `sandbox` is mounted at `/app/data`, so `suppliers.db`, `docs.faiss`,
+`compiled_synthesizer.json` and `compile_report.json` survive restarts and rebuilds. Verify with
+`docker compose restart` — `/health` should still report `dspy_compiled: true`.
 
 ---
 
 ## 2. HTTPS (required)
 
 The Vercel frontend is served over HTTPS, so the browser **blocks a plain-HTTP backend as mixed
-content**. `http://<ip>:8000` works from curl and from a local frontend, but never from the
+content**. `http://<ec2-ip>:8080` works from curl and from a local frontend, but never from the
 deployed site. Pick one:
 
-### Option A — Cloudflare tunnel (used by this deployment)
-
-Point the tunnel at `http://localhost:8000`. TLS terminates at Cloudflare's edge. No inbound ports
-need to be open on the security group at all, since the tunnel connects outbound. Caddy is not used.
-
-### Option B — Domain + Caddy
-
-```bash
-echo "API_DOMAIN=api.example.com" >> .env    # A record must point at this host
-sudo docker compose --profile tls up -d      # Caddy fetches a Let's Encrypt cert automatically
-```
-
-Requires inbound **80** (ACME challenge) and **443** open in the firewall/security group.
+- **Cloudflare tunnel (used here):** point the tunnel at `http://localhost:8080`. TLS terminates at
+  Cloudflare's edge and no inbound port needs to be open in the security group at all.
+- **Domain + reverse proxy:** point an A record at the instance and put Caddy/nginx in front of
+  `:8080`; requires inbound 80 (ACME) and 443.
 
 ---
 
@@ -81,60 +95,49 @@ npm install
 vercel deploy --prod
 ```
 
-The API URL is committed in `frontend/.env.production`, so no dashboard configuration is needed.
-To repoint at a different backend, edit that file and redeploy.
+`frontend/.env.production` holds `NEXT_PUBLIC_API_URL`; edit it and redeploy to repoint at a
+different backend.
 
 ---
 
 ## Gotchas
 
-These all cost real debugging time. They are listed because each one fails in a way that does not
-obviously point at its cause.
+**1. Don't mark `NEXT_PUBLIC_API_URL` as a Vercel "Sensitive" env var.** Vercel hides sensitive
+values from the build, so the URL never reaches the bundle and the deployed app silently has no
+backend. `NEXT_PUBLIC_*` is browser-exposed by definition — committing it in `.env.production` is
+correct, not a leak.
 
-**1. `--loop asyncio` is mandatory.**
-`uvicorn[standard]` installs uvloop. RAGAS imports `nest_asyncio`, which cannot patch a uvloop loop
-and kills the process at startup:
+**2. Never submit a bare `*.vercel.app` subdomain.** Those are shared across accounts. Use the
+project's full production alias (`<project>-<org>.vercel.app`) or your own domain.
 
-```
-ValueError: Can't patch loop of type <class 'uvloop.Loop'>
-```
+**3. `docker compose exec api python compile_dspy.py`, not `run`.** `run` starts a second container
+with the same volume; `exec` reuses the running one and its already-warm model.
 
-The flag is baked into the Dockerfile CMD and the README's local command — don't remove it. Note
-that `TestClient` does not use uvloop, so this bug is invisible to tests and only appears under a
-real server.
+**4. A missing `OPENROUTER_API_KEY` fails at request time, not boot.** `/health` stays green while
+`/assess` returns 502 `synthesis failed: RuntimeError: OPENROUTER_API_KEY is not set`. Check
+`/health` **and** one `/assess` after deploying.
 
-**2. Don't mark `NEXT_PUBLIC_API_URL` as a Vercel "Sensitive" env var.**
-Vercel hides sensitive values from the build, so the URL never reaches the bundle and the deployed
-app silently has no backend. `NEXT_PUBLIC_*` is browser-exposed by definition, so committing it in
-`.env.production` is correct, not a leak.
-
-**3. `API_DOMAIN` must not use `${VAR:?}`.**
-Compose interpolates variables even for services in a disabled profile, so `:?` on the Caddy
-service breaks a plain `docker compose up` for anyone not using TLS. It defaults to empty instead.
-
-**4. Never submit a bare `*.vercel.app` subdomain.**
-Those are shared across all Vercel accounts. `scheme-navigator.vercel.app` resolved to this project
-briefly and now serves an unrelated app. Use the project's full production alias
-(`<project>-<org>.vercel.app`) or a custom domain you control.
+**5. Neo4j down is not an outage.** `/assess` still returns SQL + FAISS context with
+`degraded: ["graph"]`. Don't read a `[GRAPH] ERROR` panel in the UI as a broken deployment — that
+is the required degradation path.
 
 ---
 
 ## Operational notes
 
-| Operation               | Cost on a t2.micro (1 GB, 1 vCPU) |
-| ----------------------- | --------------------------------- |
-| Image build             | ~20 min                           |
-| First boot to healthy   | ~2–3 min                         |
-| Indexing a 204-page PDF | ~2m15s                            |
-| One query end to end    | ~16 s                             |
+| Operation                       | Cost on a t2.micro (1 GB, 1 vCPU) |
+| ------------------------------- | --------------------------------- |
+| Image build                     | ~15-20 min                        |
+| First boot to healthy (+seed)   | ~3 min                            |
+| Parallel retrieval, one entity  | <0.1 s                            |
+| One `/assess` end to end        | ~5-12 s (LLM-bound)               |
+| `compile_dspy.py`               | ~3-5 min                          |
 
-On a 2 GB / 2 vCPU box these drop several-fold. For code-only changes prefer `git pull && docker compose up -d` over a rebuild — the image only needs rebuilding when `requirements.txt` or
-the `Dockerfile` changes.
-
-Logs and health:
+For code-only changes prefer `git pull && docker compose up -d --build api` — the pip layer is
+cached unless `requirements.txt` changes.
 
 ```bash
-sudo docker compose logs -f --tail 50
-curl -s localhost:8000/health
-curl -s "localhost:8000/logs?limit=5"      # recent RAGAS-scored queries
+docker compose logs -f --tail 50
+curl -s localhost:8080/health
+curl -s localhost:8080/judge-demo          # judge rejecting a bad output
 ```

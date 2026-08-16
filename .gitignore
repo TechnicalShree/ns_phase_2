@@ -1,0 +1,11 @@
+.env
+backend/.env
+backend/data/
+backend/.hf/
+__pycache__/
+*.pyc
+.venv/
+node_modules/
+.next/
+frontend/.vercel
+.DS_Store
