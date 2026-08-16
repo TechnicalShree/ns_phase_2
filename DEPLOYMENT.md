@@ -121,15 +121,14 @@ briefly and now serves an unrelated app. Use the project's full production alias
 
 ## Operational notes
 
-| Operation | Cost on a t2.micro (1 GB, 1 vCPU) |
-|---|---|
-| Image build | ~20 min |
-| First boot to healthy | ~2–3 min |
-| Indexing a 204-page PDF | ~2m15s |
-| One query end to end | ~16 s |
+| Operation               | Cost on a t2.micro (1 GB, 1 vCPU) |
+| ----------------------- | --------------------------------- |
+| Image build             | ~20 min                           |
+| First boot to healthy   | ~2–3 min                         |
+| Indexing a 204-page PDF | ~2m15s                            |
+| One query end to end    | ~16 s                             |
 
-On a 2 GB / 2 vCPU box these drop several-fold. For code-only changes prefer `git pull &&
-docker compose up -d` over a rebuild — the image only needs rebuilding when `requirements.txt` or
+On a 2 GB / 2 vCPU box these drop several-fold. For code-only changes prefer `git pull && docker compose up -d` over a rebuild — the image only needs rebuilding when `requirements.txt` or
 the `Dockerfile` changes.
 
 Logs and health:
