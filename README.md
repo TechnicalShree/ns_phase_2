@@ -4,7 +4,7 @@
 SQL = delivery/defect metrics · FAISS = contract/complaint/audit text · Neo4j = subsidiary/ownership
 and sub-tier dependency graph · Verdict = **APPROVE / FLAG**.
 
-**Live app:** _<vercel URL — fill in after `vercel deploy --prod`>_
+**Live app:** https://frontend-krushnasr96gmailcoms-projects.vercel.app
 **Live API:** _<https://... — fill in after deploy>_ (`/health`, `/docs`)
 
 Three retrieval engines are queried **simultaneously** for the same supplier, and a **DSPy

@@ -3,7 +3,7 @@
 Frontend on Vercel, backend as a Docker container on an EC2 instance listening on **:8080**,
 Neo4j either on the same box (compose profile) or on Neo4j Aura.
 
-**Live app:** _<vercel URL>_
+**Live app:** https://frontend-krushnasr96gmailcoms-projects.vercel.app
 **Live API:** _<https://... >_ (`/health`, `/docs`)
 
 ---
