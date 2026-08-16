@@ -128,6 +128,25 @@ def pred_to_dict(pred) -> dict:
     }
 
 
+def explain_failure(exc: Exception) -> dict:
+    """Turn an LLM-provider exception into something a UI can show a human."""
+    text = str(exc)
+    if not config.OPENROUTER_API_KEY:
+        reason, hint = "no_api_key", "Set OPENROUTER_API_KEY in backend/.env and restart the API."
+    elif "free-models-per-day" in text or "RateLimit" in type(exc).__name__:
+        reason = "rate_limited"
+        hint = ("The OpenRouter free-model daily allowance is used up. It resets at 00:00 UTC, or add "
+                "credits to raise the cap. Retrieval below is unaffected.")
+    elif "more credits" in text or "402" in text:
+        reason, hint = "out_of_credits", "The OpenRouter account is out of credits — top it up to synthesize."
+    elif "not found" in text.lower() or "404" in text:
+        reason, hint = "model_unavailable", f"Model {config.STUDENT_MODEL} is not available on this account."
+    else:
+        reason, hint = "llm_error", "The language model call failed; the three retrieval contexts are still shown."
+    return {"reason": reason, "hint": hint, "model": config.STUDENT_MODEL,
+            "detail": f"{type(exc).__name__}: {text[:400]}"}
+
+
 def compile_report() -> dict:
     if config.TRACE_PATH.exists():
         return json.loads(config.TRACE_PATH.read_text())

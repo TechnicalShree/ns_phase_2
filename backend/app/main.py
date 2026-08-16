@@ -64,6 +64,14 @@ def assess(req: AssessRequest):
            (("sql", contexts["sql"]), ("faiss", contexts["faiss"]), ("graph", contexts["graph"]))):
         raise HTTPException(404, f"no store has any data for '{entity}'")
 
+    base = {
+        "entity": entity,
+        "contexts": contexts,
+        "degraded": [k for k, c in contexts.items() if "ERROR" in c.split("\n")[0]],
+        "compiled": config.COMPILED_PATH.exists(),
+        "timings": timings,
+    }
+
     t0 = time.perf_counter()
     try:
         module = synthesize.get_module()
@@ -73,19 +81,21 @@ def assess(req: AssessRequest):
             doc_context=contexts["faiss"],
             graph_context=contexts["graph"],
         )
-    except Exception as exc:  # noqa: BLE001
-        raise HTTPException(502, f"synthesis failed: {type(exc).__name__}: {exc}") from exc
+    except Exception as exc:  # noqa: BLE001 — retrieval already succeeded; report the LLM failure in-band
+        # a 5xx here would be replaced by the proxy's own error page, which carries no CORS
+        # headers — the browser then reports "Failed to fetch" and the real reason is lost.
+        timings["synthesis"] = round(time.perf_counter() - t0, 3)
+        return {**base, "verdict": None, "judge": None,
+                "synthesis_error": synthesize.explain_failure(exc)}
     timings["synthesis"] = round(time.perf_counter() - t0, 3)
 
     failures = synthesize.judge_failures(pred)
     return {
-        "entity": entity,
-        "contexts": contexts,
-        "degraded": [k for k, c in contexts.items() if "ERROR" in c.split("\n")[0]],
+        **base,
         "verdict": synthesize.pred_to_dict(pred),
         "judge": {"passed": not failures, "failures": failures},
         "compiled": module._compiled_state,
-        "timings": timings,
+        "synthesis_error": None,
     }
 
 

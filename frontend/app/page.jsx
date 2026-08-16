@@ -39,11 +39,18 @@ export default function Page() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ entity }),
       });
-      const d = await r.json();
-      if (!r.ok) throw new Error(d.detail || r.statusText);
+      // a proxy error page is HTML, not JSON — read it as text first so the message survives
+      const raw = await r.text();
+      let d;
+      try {
+        d = JSON.parse(raw);
+      } catch {
+        throw new Error(`API returned ${r.status} ${r.statusText}: ${raw.slice(0, 200)}`);
+      }
+      if (!r.ok) throw new Error(d.detail || `${r.status} ${r.statusText}`);
       setResult(d);
     } catch (e) {
-      setError(e.message);
+      setError(e.message === "Failed to fetch" ? `Could not reach the API at ${API}.` : e.message);
     } finally {
       setBusy(false);
     }
@@ -93,6 +100,17 @@ export default function Page() {
 
           <div className="panel" style={{ marginTop: 14 }}>
             <h2>Synthesized verdict</h2>
+            {result.synthesis_error ? (
+              <div className="notice">
+                <strong>Synthesis unavailable — {result.synthesis_error.reason.replace(/_/g, " ")}.</strong>
+                <p>{result.synthesis_error.hint}</p>
+                <details>
+                  <summary>provider detail</summary>
+                  <pre>{result.synthesis_error.detail}</pre>
+                </details>
+              </div>
+            ) : (
+            <>
             <div className="verdict">
               <span className={`tag ${v.verdict}`}>{v.verdict}</span>
               <span>risk score {v.risk_score}/100</span>
@@ -112,6 +130,8 @@ export default function Page() {
                 <summary>chain-of-thought trace</summary>
                 <pre>{v.reasoning}</pre>
               </details>
+            )}
+            </>
             )}
             <p className="meta">
               parallel retrieval {result.timings.parallel_total}s (serial sum would be{" "}
