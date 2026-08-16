@@ -9,3 +9,4 @@ node_modules/
 .next/
 frontend/.vercel
 .DS_Store
+requirement/Neo4j-*.txt
