@@ -3,7 +3,7 @@
 Frontend on Vercel, backend as a Docker container on an EC2 instance listening on **:8080**,
 and Neo4j as a second container on the same box.
 
-**Live app:** https://frontend-krushnasr96gmailcoms-projects.vercel.app
+**Live app:** https://supplier-risk-krushnasr96gmailcoms-projects.vercel.app
 **Live API:** _<https://... >_ (`/health`, `/docs`)
 
 ---
@@ -91,14 +91,21 @@ deployed site. Pick one:
 
 ## 3. Frontend — Vercel
 
+The Vercel project `supplier-risk` is connected to this GitHub repo with **Root Directory =
+`frontend`**, so every push to `main` builds and promotes to production automatically. Nothing to run.
+
+First-time wiring (already done):
+
 ```bash
 cd frontend
-npm install
-vercel deploy --prod
+vercel git connect https://github.com/TechnicalShree/ns_phase_2.git
+# then set Root Directory = frontend in Project Settings -> Build & Deployment
 ```
 
-`frontend/.env.production` holds `NEXT_PUBLIC_API_URL`; edit it and redeploy to repoint at a
-different backend.
+Manual deploy if you need one: `cd frontend && vercel deploy --prod`.
+
+`frontend/.env.production` holds `NEXT_PUBLIC_API_URL`; edit it and push to repoint at a different
+backend.
 
 ---
 
@@ -109,17 +116,22 @@ values from the build, so the URL never reaches the bundle and the deployed app 
 backend. `NEXT_PUBLIC_*` is browser-exposed by definition — committing it in `.env.production` is
 correct, not a leak.
 
-**2. Never submit a bare `*.vercel.app` subdomain.** Those are shared across accounts. Use the
+**2. Deployment Protection blocks the public URL.** A new Vercel project defaults to Vercel
+Authentication, which redirects anonymous visitors to a login page — the deployment looks fine to
+you and is unreachable to a reviewer. Turn it off in Settings → Deployment Protection, then verify
+in an incognito window.
+
+**3. Never submit a bare `*.vercel.app` subdomain.** Those are shared across accounts. Use the
 project's full production alias (`<project>-<org>.vercel.app`) or your own domain.
 
-**3. `docker compose exec api python compile_dspy.py`, not `run`.** `run` starts a second container
+**4. `docker compose exec api python compile_dspy.py`, not `run`.** `run` starts a second container
 with the same volume; `exec` reuses the running one and its already-warm model.
 
-**4. A missing `OPENROUTER_API_KEY` fails at request time, not boot.** `/health` stays green while
+**5. A missing `OPENROUTER_API_KEY` fails at request time, not boot.** `/health` stays green while
 `/assess` returns 502 `synthesis failed: RuntimeError: OPENROUTER_API_KEY is not set`. Check
 `/health` **and** one `/assess` after deploying.
 
-**5. Neo4j down is not an outage.** `/assess` still returns SQL + FAISS context with
+**6. Neo4j down is not an outage.** `/assess` still returns SQL + FAISS context with
 `degraded: ["graph"]`. Don't read a `[GRAPH] ERROR` panel in the UI as a broken deployment — that
 is the required degradation path.
 
