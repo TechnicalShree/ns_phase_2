@@ -37,8 +37,8 @@ contexts side by side, so the retrieval is visible, not hidden behind the answer
                         │ dspy.ChainOfThought(            │
                         │   SupplierRiskVerdict)          │
                         │ compiled_synthesizer.json       │
-                        │ student: gpt-4o-mini            │
-                        │ teacher: claude-sonnet-4.5      │
+                        │ student: gpt-oss-20b:free       │
+                        │ teacher: nemotron-3-ultra:free  │
                         └──────────────┬──────────────────┘
                                        │
                         ┌──────────────▼──────────────────┐
@@ -57,10 +57,10 @@ contexts side by side, so the retrieval is visible, not hidden behind the answer
 | Structured store | SQLite (`suppliers`, `deliveries`)                                |
 | Semantic store   | FAISS `IndexFlatIP` + `rank_bm25`, fused with Reciprocal Rank Fusion |
 | Embeddings       | `sentence-transformers/all-MiniLM-L6-v2` (local, baked into image) |
-| Graph store      | Neo4j 5 (Aura or Docker)                                          |
+| Graph store      | Neo4j 5 (Docker, same host as the API; Aura also supported)        |
 | Synthesis        | DSPy `ChainOfThought` + `BootstrapFewShot`, LLMs via OpenRouter    |
 | API              | FastAPI + uvicorn on **:8080**                                    |
-| UI               | Next.js 15 (App Router), deployed on Vercel                       |
+| UI               | Next.js 16 (App Router), deployed on Vercel                       |
 
 ## What lives where (and why the three engines don't duplicate each other)
 
@@ -79,12 +79,10 @@ dependency is watchlisted — that is the point of querying all three.
 
 ### 1. Neo4j
 
-Either **Aura free** (recommended, nothing to run locally) — create an instance at
-<https://console.neo4j.io> and copy the URI/password into `backend/.env` — or local Docker:
-
-```bash
-docker compose --profile local-graph up -d neo4j     # bolt://localhost:7687, user neo4j / supplierrisk
-```
+Neo4j runs as a service in `docker-compose.yml` on the same host as the API (bolt is bound to
+`127.0.0.1` only), so `docker compose up -d` in the next step starts it for you — nothing to install.
+To use **Neo4j Aura** instead, set `NEO4J_URI=neo4j+s://<id>.databases.neo4j.io` in `backend/.env`
+and drop the `depends_on` block from the `api` service.
 
 ### 2. Backend
 

@@ -1,7 +1,7 @@
 # Deployment — Phase 2 (Supplier Risk, three-engine retrieval)
 
 Frontend on Vercel, backend as a Docker container on an EC2 instance listening on **:8080**,
-Neo4j either on the same box (compose profile) or on Neo4j Aura.
+and Neo4j as a second container on the same box.
 
 **Live app:** https://frontend-krushnasr96gmailcoms-projects.vercel.app
 **Live API:** _<https://... >_ (`/health`, `/docs`)
@@ -38,8 +38,8 @@ Security group: open **8080** (or keep it closed and use a Cloudflare tunnel —
 
 ### Add swap first on a 1 GB box
 
-The API container needs ~1.3 GB RSS, and Neo4j another ~700 MB if you run it locally. On a
-`t2.micro` both get OOM-killed without swap:
+The API container needs ~1.3 GB RSS and Neo4j another ~700 MB. On a `t2.micro` both get
+OOM-killed without swap:
 
 ```bash
 sudo fallocate -l 4G /swapfile && sudo chmod 600 /swapfile
@@ -47,13 +47,15 @@ sudo mkswap /swapfile && sudo swapon /swapfile
 echo '/swapfile none swap sw 0 0' | sudo tee -a /etc/fstab
 ```
 
-### Neo4j: Aura or local
+### Neo4j
 
-- **Aura (recommended on a small box):** set `NEO4J_URI=neo4j+s://<id>.databases.neo4j.io`,
-  `NEO4J_USER=neo4j`, `NEO4J_PASSWORD=…` in `backend/.env`. Nothing else to run.
-  Free Aura instances **pause when idle and are deleted after 30 days** — if `generate_sandbox.py`
-  prints `Cannot resolve address …databases.neo4j.io`, the instance is gone; create a new one.
-- **Local:** `docker compose --profile local-graph up -d` and set `NEO4J_URI=bolt://neo4j:7687`.
+- **Same box (default):** the `neo4j` service in `docker-compose.yml` starts with the stack, bolt
+  and the browser bound to `127.0.0.1` only. Keep `NEO4J_URI=bolt://neo4j:7687` and make
+  `NEO4J_PASSWORD` in `backend/.env` match the compose default (`supplierrisk`) or set it in a root
+  `.env` too — compose reads that one for the container's `NEO4J_AUTH`.
+- **Aura instead:** set `NEO4J_URI=neo4j+s://<id>.databases.neo4j.io` and remove the `depends_on`
+  block from the `api` service. Free Aura instances **pause when idle and are deleted after 30 days** —
+  `Cannot resolve address …databases.neo4j.io` means the instance is gone.
 
 Re-seed the graph after switching:
 
