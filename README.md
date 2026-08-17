@@ -105,7 +105,20 @@ python test_smoke.py                     # engines, degradation, parallelism, ju
 uvicorn app.main:app --port 8080
 ```
 
-### 3. Compile the DSPy module (required for the "compiled" badge)
+### 3. Optional — restore the exact graph from the deployed instance
+
+`generate_sandbox.py` builds the graph deterministically, so you normally don't need this. To load
+the snapshot taken from the live EC2 instance instead:
+
+```bash
+docker compose exec -T neo4j cypher-shell -u neo4j -p supplierrisk < backend/seed/neo4j_export.cypher
+```
+
+39 nodes and 151 relationships (`Supplier`, `Parent`, `Site`, `Buyer` + `OWNED_BY`, `OPERATES_AT`,
+`SUPPLIES_TO`, `DEPENDS_ON`). The file starts with `MATCH (n) DETACH DELETE n;`, so it replaces
+whatever is in the database.
+
+### 4. Compile the DSPy module (required for the "compiled" badge)
 
 ```bash
 docker compose exec api python compile_dspy.py       # ~3-5 min, ~25 OpenRouter calls
@@ -115,7 +128,7 @@ Writes `data/compiled_synthesizer.json` (the optimized state, loaded automatical
 request) and `data/compile_report.json` (uncompiled vs compiled judge pass rate, plus the held-out
 supplier's before/after output). Served at `GET /compile-report`.
 
-### 4. Frontend
+### 5. Frontend
 
 ```bash
 cd frontend && npm install
