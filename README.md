@@ -160,7 +160,8 @@ curl -s localhost:8080/assess -H 'content-type: application/json' \
 - **Three genuinely different contexts** — see the table above; `test_smoke.py::test_engines` asserts all three differ.
 - **Graceful degradation** — stop Neo4j (`docker compose stop neo4j`, or break `NEO4J_URI`) and re-run `/assess`: SQL and FAISS still answer, the graph panel shows `[GRAPH] ERROR: …`, and `degraded: ["graph"]` appears in the response. No 500.
 - **Real parallelism** — every `/assess` response carries `timings.parallel_total` vs `timings.sum_of_engines`; the total tracks the slowest engine, not the sum.
-- **Really compiled** — `data/compiled_synthesizer.json` exists on disk and `/compile-report` shows the bootstrapped demo count and the uncompiled→compiled judge pass rate on the same dev set, plus the held-out supplier's output both ways.
+- **Really compiled** — `data/compiled_synthesizer.json` holds 4 teacher-bootstrapped demos under `think.predict.demos`; `/health` reports `dspy_compiled: true` and every `/assess` response carries `compiled: true`. `/compile-report` has the full run: 25-supplier trainset, 6-example dev set, 52 s compile, and the held-out supplier's output before and after.
+- **Honest note on the delta** — on this judge the uncompiled student already passes 6/6, so the compiled pass rate is also 6/6: the measured improvement is 0 pp. The optimizer ran for real (4 traces bootstrapped from the teacher, saved and loaded at request time), but on this metric it had no headroom to show. A stricter metric would be needed to demonstrate a gap.
 - **Judge really rejects** — `GET /judge-demo` returns a deliberately broken output (`verdict: MAYBE`, `risk_score: 140`, banned phrase) with the exact failure list; `test_smoke.py::test_judge_rejects_bad_output` asserts it.
 
 ## Judge metric rules
