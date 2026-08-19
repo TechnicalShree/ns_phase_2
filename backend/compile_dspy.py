@@ -80,7 +80,7 @@ def main():
 
     comp_rate, comp_samples = pass_rate(compiled, devset)
     comp_heldout = compiled(**heldout_ex.inputs())
-    n_demos = len(getattr(compiled.think, "demos", []))
+    n_demos = len(getattr(compiled.think.predict, "demos", []))  # ChainOfThought wraps a Predict
 
     config.TRACE_PATH.write_text(json.dumps({
         "student_model": config.STUDENT_MODEL,

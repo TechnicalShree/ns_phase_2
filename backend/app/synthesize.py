@@ -105,17 +105,21 @@ def make_lm(model: str, **kw):
     return dspy.LM(model, api_key=config.OPENROUTER_API_KEY, api_base="https://openrouter.ai/api/v1", **kw)
 
 
-@functools.lru_cache(maxsize=1)
-def get_module():
-    """The student module, with compiled state loaded if compile_dspy.py has been run."""
+@functools.lru_cache(maxsize=2)
+def _build_module(compiled_mtime: float):
+    """Keyed on the state file's mtime so a fresh compile is picked up without a restart."""
     dspy.configure(lm=make_lm(config.STUDENT_MODEL, temperature=0.2, max_tokens=1200))
     module = RiskSynthesizer()
-    if config.COMPILED_PATH.exists():
+    module._compiled_state = compiled_mtime > 0
+    if module._compiled_state:
         module.load(str(config.COMPILED_PATH))
-        module._compiled_state = True
-    else:
-        module._compiled_state = False
     return module
+
+
+def get_module():
+    """The student module, with compiled state loaded if compile_dspy.py has been run."""
+    stamp = config.COMPILED_PATH.stat().st_mtime if config.COMPILED_PATH.exists() else 0.0
+    return _build_module(stamp)
 
 
 def pred_to_dict(pred) -> dict:
