@@ -25,7 +25,8 @@ services:
       NEO4J_server_memory_heap_max__size: 512M
       NEO4J_server_memory_pagecache_size: 256M
     healthcheck:
-      test: ["CMD-SHELL", "cypher-shell -u neo4j -p ${NEO4J_PASSWORD:-supplierrisk} 'RETURN 1' || exit 1"]
+      # a bolt TCP probe, not cypher-shell: that starts a second JVM and OOMs a 1 GB box
+      test: ["CMD-SHELL", "exec 3<>/dev/tcp/localhost/7687 || exit 1"]
       interval: 10s
       timeout: 10s
       retries: 30
